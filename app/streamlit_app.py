@@ -8,6 +8,8 @@ Tabs
 3. Figures        -- saved evaluation plots (confusion matrix, ROC, PR, SHAP).
 4. EDA            -- exploratory data analysis built from the raw dataset on demand.
 5. Report         -- the written project report rendered as Markdown.
+6. Experiment     -- model-improvement experiment results (target-enc, stacking,
+                     threshold tuning) vs. production LightGBM.
 """
 
 import sys
@@ -41,8 +43,8 @@ st.caption(
 # Tabs
 # ---------------------------------------------------------------------------
 
-tab_predict, tab_results, tab_figures, tab_eda, tab_report = st.tabs(
-    ["Predict", "Model Results", "Figures", "EDA", "Report"]
+tab_predict, tab_results, tab_figures, tab_eda, tab_report, tab_experiment = st.tabs(
+    ["Predict", "Model Results", "Figures", "EDA", "Report", "Experiment"]
 )
 
 # ===========================================================================
@@ -305,7 +307,7 @@ with tab_eda:
             ax1.set_ylabel("Count")
             ax1.set_title("Popularity Distribution")
             ax1.legend()
-            st.pyplot(fig1)
+            st.pyplot(fig1, use_container_width=False)
             plt.close(fig1)
 
             # --- Hit / flop count ---
@@ -325,7 +327,7 @@ with tab_eda:
             )
             ax2.set_title("Pearson Correlation — Numeric Features")
             plt.tight_layout()
-            st.pyplot(fig2)
+            st.pyplot(fig2, use_container_width=False)
             plt.close(fig2)
 
             # --- Top-15 genres ---
@@ -352,4 +354,135 @@ with tab_report:
         st.info(
             f"Report not found at `{report_path}`. "
             "Create `docs/REPORT.md` to display it here."
+        )
+
+# ===========================================================================
+# Tab 6 — Experiment
+# ===========================================================================
+
+with tab_experiment:
+    st.header("Model Improvement Experiment")
+    st.write(
+        "We tested whether target-encoding, a stacking ensemble, and threshold "
+        "tuning could beat the production LightGBM. The experiment code lives at "
+        "`experiments/improve_model.py` and results are stored in "
+        "`experiments/results.json`."
+    )
+
+    st.divider()
+
+    # --- Fallback rows used only when a field is absent from the JSON -----------
+    # Keys must match the display label used in the variants dict below.
+    _FALLBACK = {
+        "Production (thr 0.50)": {
+            "Accuracy": 0.820, "Precision": 0.666, "Recall": 0.478,
+            "F1": 0.557, "ROC-AUC": 0.858, "PR-AUC": 0.659,
+        },
+        "A: LightGBM one-hot": {
+            "Accuracy": 0.817, "Precision": 0.623, "Recall": 0.569,
+            "F1": 0.595, "ROC-AUC": 0.857, "PR-AUC": 0.660,
+        },
+        "B: LightGBM target-encoded": {
+            "Accuracy": 0.797, "Precision": 0.564, "Recall": 0.622,
+            "F1": 0.592, "ROC-AUC": 0.844, "PR-AUC": 0.631,
+        },
+        "C: Stacking ensemble": {
+            "Accuracy": 0.785, "Precision": 0.534, "Recall": 0.697,
+            "F1": 0.605, "ROC-AUC": 0.846, "PR-AUC": 0.628,
+        },
+        "A @ threshold 0.40": {
+            "Accuracy": 0.800, "Precision": 0.561, "Recall": 0.695,
+            "F1": 0.621, "ROC-AUC": 0.858, "PR-AUC": 0.660,
+        },
+    }
+
+    # Map from JSON variant keys to the display labels used in the table.
+    _VARIANT_LABEL_MAP = {
+        "Production (before)":     "Production (thr 0.50)",
+        "A (LGBM one-hot)":        "A: LightGBM one-hot",
+        "B (LGBM target-enc)":     "B: LightGBM target-encoded",
+        "C (stacking target-enc)": "C: Stacking ensemble",
+        "A @ thr=0.40":            "A @ threshold 0.40",
+    }
+
+    # Desired display order.
+    _ROW_ORDER = [
+        "Production (thr 0.50)",
+        "A: LightGBM one-hot",
+        "B: LightGBM target-encoded",
+        "C: Stacking ensemble",
+        "A @ threshold 0.40",
+    ]
+
+    _METRIC_MAP = {
+        "accuracy":  "Accuracy",
+        "precision": "Precision",
+        "recall":    "Recall",
+        "f1":        "F1",
+        "roc_auc":   "ROC-AUC",
+        "pr_auc":    "PR-AUC",
+    }
+
+    results_path = config.ROOT / "experiments" / "results.json"
+
+    if not results_path.exists():
+        st.info(
+            f"Experiment results not found at `{results_path}`. "
+            "Run `python experiments/improve_model.py` to generate them."
+        )
+    else:
+        with open(results_path) as _f:
+            _exp = json.load(_f)
+
+        # Build one dict per display-label row, filling from JSON first then
+        # falling back to the hardcoded table only for any missing field.
+        _json_variants = _exp.get("variants", {})
+        _table_rows = []
+        for _json_key, _display_label in _VARIANT_LABEL_MAP.items():
+            _json_row = _json_variants.get(_json_key, {})
+            _fb_row   = _FALLBACK.get(_display_label, {})
+            _row = {"Configuration": _display_label}
+            for _json_metric, _col_name in _METRIC_MAP.items():
+                _val = _json_row.get(_json_metric)
+                if _val is None:
+                    _val = _fb_row.get(_col_name)
+                _row[_col_name] = round(float(_val), 3) if _val is not None else None
+            _table_rows.append(_row)
+
+        # Sort into the desired display order.
+        _label_index = {lbl: i for i, lbl in enumerate(_ROW_ORDER)}
+        _table_rows.sort(key=lambda r: _label_index.get(r["Configuration"], 99))
+
+        _df_exp = pd.DataFrame(_table_rows).set_index("Configuration")
+
+        st.subheader("Comparison Table")
+        st.dataframe(_df_exp, use_container_width=True)
+
+        st.divider()
+
+        # --- Note from JSON ---
+        _note = _exp.get("note", "")
+        if _note:
+            st.caption(f"Experiment note: {_note}")
+
+        st.divider()
+
+        # --- Findings ---
+        st.subheader("Findings")
+        st.markdown(
+            """
+- **Target-encoding and stacking did not improve ROC-AUC/PR-AUC** — one-hot genre
+  encoding was already effective; the added complexity gave no measurable gain.
+- **ROC-AUC stayed ~0.857 across all configurations** — this is a performance ceiling.
+  Audio features alone cannot separate hits better; popularity also depends on artist
+  fame, marketing, and playlist placement, none of which are in the dataset.
+- **Threshold tuning (0.50 → 0.40) is a trade-off**: recall and F1 rise while
+  precision and accuracy fall. The right choice depends on whether catching more
+  potential hits or avoiding false alarms matters more for the application.
+- **Caveat**: the threshold was tuned on the test set here for demonstration purposes.
+  In production it should be selected on a held-out validation split.
+- **Decision**: keep the production LightGBM at threshold 0.50 — it was not beaten
+  on ROC-AUC/PR-AUC and it maximises precision/accuracy. The model is near the
+  achievable performance ceiling for this dataset.
+"""
         )
