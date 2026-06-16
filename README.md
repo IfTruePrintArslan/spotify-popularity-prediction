@@ -68,31 +68,33 @@ Move the sliders for a live hit probability. Requires a trained model (run the p
 ## Definitions
 
 - **Hit**: `popularity >= 50` (configurable via `HIT_THRESHOLD` in `src/config.py`).
-- Class imbalance handled via `class_weight`/`average_precision` scoring; the best model is selected on cross-validated PR-AUC.
+- Class imbalance handled via SMOTE oversampling (inside the CV pipeline) and `average_precision` scoring; the best model is selected on cross-validated PR-AUC.
 
 ## Results
 
-Trained on **89,741 tracks** after de-duplicating `track_id` (114k raw rows → ~89.7k unique). Hit rate ≈ **23.6%** (popularity ≥ 50).
+Trained on **89,741 tracks** after de-duplicating `track_id` (114k raw rows → ~89.7k unique). Hits (popularity >= 50) make up roughly a quarter of all tracks (minority class).
 
-Cross-validated PR-AUC (5-fold, training split):
+Cross-validated PR-AUC (5-fold stratified, training split):
 
 | Model | CV PR-AUC |
 |-------|-----------|
-| **RandomForest** (selected) | **0.661** |
-| XGBoost | 0.652 |
-| LightGBM | 0.649 |
-| LogisticRegression | 0.593 |
-| Dummy (most-frequent) | 0.236 |
+| **LightGBM** (selected) | **0.6384** |
+| XGBoost | 0.6057 |
+| Logistic Regression | 0.5949 |
+| Random Forest | 0.5548 |
+| Dummy (baseline) | 0.2363 |
 
-Held-out test metrics (RandomForest):
+Held-out test metrics — **final model: LightGBM (tuned), 3.8 MB**:
 
 | Metric | Value |
 |--------|-------|
-| Accuracy | 0.824 |
-| ROC-AUC | 0.864 |
-| PR-AUC | 0.671 |
-| F1 | 0.526 |
-| Precision | 0.720 |
-| Recall | 0.415 |
+| Accuracy | 0.8200 |
+| Precision | 0.6661 |
+| Recall | 0.4783 |
+| F1 | 0.5568 |
+| ROC-AUC | 0.8575 |
+| PR-AUC | 0.6585 |
 
-**Top drivers (permutation importance):** `track_genre` dominates (~0.37, ≈20× the next feature), followed by instrumentalness, duration, valence, and loudness — audio features carry real but secondary signal once genre is known. ROC/PR/confusion + SHAP summary plots are saved to `reports/figures/` (gitignored).
+**Top drivers (permutation importance):** `track_genre` dominates (0.3883, more than 13x the next feature), followed by instrumentalness (0.0292), acousticness (0.0203), energy (0.0202), and duration_ms (0.0190) — audio features carry real but secondary signal once genre is known. ROC/PR/confusion + SHAP summary plots are saved to `reports/figures/` (gitignored).
+
+Full written report: [docs/REPORT.md](docs/REPORT.md)
