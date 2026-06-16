@@ -2,8 +2,10 @@
 
 load -> clean -> split -> CV-compare (SMOTE pipelines) -> tune ensembles ->
 select best tuned model -> fit -> held-out test metrics -> train-vs-test
-overfitting report -> plots + SHAP -> save model.
+overfitting report -> plots + SHAP -> save model -> persist metrics.json.
 """
+import json
+
 from src import config, data, evaluate, interpret, train
 
 
@@ -54,10 +56,50 @@ def main():
     evaluate.save_classification_plots(best, X_test, y_test)
     interpret.shap_summary(best, X_test.sample(min(2000, len(X_test)),
                                                random_state=config.RANDOM_STATE))
-    print("\nPermutation importance:\n",
-          interpret.permutation_importance_table(best, X_test, y_test).head(10))
+    # Compute permutation importance once and reuse for both the print and the JSON.
+    perm_table = interpret.permutation_importance_table(best, X_test, y_test)
+    print("\nPermutation importance:\n", perm_table.head(10))
 
-    # 7) Persist the chosen model.
+    # 7) Persist metrics to JSON so the dashboard can read reproducible numbers
+    #    without re-running the pipeline.  All values are taken directly from the
+    #    objects computed above — nothing is hardcoded here.
+
+    # Model size in MB (0 if model file not yet written — will be updated on next run).
+    model_size_mb = round(config.MODEL_PATH.stat().st_size / 1e6, 1) if config.MODEL_PATH.exists() else None
+
+    metrics_dict = {
+        "best_model": f"{best_name} (tuned)",
+        "model_size_mb": model_size_mb,
+        # cv_results is {model_name: mean_pr_auc} from cross_validate_models
+        "cv_pr_auc": {k: round(float(v), 4) for k, v in cv_results.items()},
+        # tuned is {model_name: (pipeline, params, score)} from tune_ensembles
+        "tuned_cv_pr_auc": {k: round(float(v[2]), 4) for k, v in tuned.items()},
+        "test_metrics": {k: round(float(v), 4) for k, v in metrics.items()},
+        # of_report is a DataFrame with columns train, test, gap and index = metric name
+        "overfitting": {
+            metric: {
+                "train": round(float(of_report.loc[metric, "train"]), 4),
+                "test": round(float(of_report.loc[metric, "test"]), 4),
+            }
+            for metric in of_report.index
+        },
+        # Strip the pipeline prefix ("model__") from param keys so the JSON is readable.
+        f"best_params_{best_name.lower().replace(' ', '_').rstrip('_')}": {
+            k.replace("model__", ""): v for k, v in best_params.items()
+        },
+        # perm_table is a DataFrame with index=feature and column 'perm_importance'
+        "permutation_importance": {
+            feat: round(float(imp), 4)
+            for feat, imp in perm_table["perm_importance"].head(10).items()
+        },
+    }
+
+    config.METRICS_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with open(config.METRICS_PATH, "w") as _f:
+        json.dump(metrics_dict, _f, indent=2)
+    print(f"\nSaved metrics -> {config.METRICS_PATH}")
+
+    # 8) Persist the chosen model.
     train.save_pipeline(best)
     print(f"\nSaved model -> {config.MODEL_PATH}")
 

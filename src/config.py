@@ -58,7 +58,9 @@ ROOT = Path(__file__).resolve().parents[1]
 DATA_RAW = ROOT / "data" / "raw"
 DATA_PROCESSED = ROOT / "data" / "processed"
 MODELS_DIR = ROOT / "models"
-FIGURES_DIR = ROOT / "reports" / "figures"
+REPORTS_DIR = ROOT / "reports"
+FIGURES_DIR = REPORTS_DIR / "figures"
+METRICS_PATH = REPORTS_DIR / "metrics.json"
 RAW_CSV = DATA_RAW / "dataset.csv"
 MODEL_PATH = MODELS_DIR / "best_classifier.joblib"
 
@@ -111,5 +113,5 @@ DROP_COLS = ["Unnamed: 0", "track_id", "artists", "album_name", "track_name"]
 # Ensure required directories exist (runs on import, harmless if they exist)
 # ---------------------------------------------------------------------------
 
-for _d in (DATA_RAW, DATA_PROCESSED, MODELS_DIR, FIGURES_DIR):
+for _d in (DATA_RAW, DATA_PROCESSED, MODELS_DIR, REPORTS_DIR, FIGURES_DIR):
     _d.mkdir(parents=True, exist_ok=True)

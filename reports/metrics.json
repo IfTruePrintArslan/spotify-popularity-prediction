@@ -1,0 +1,10 @@
+{
+  "best_model": "LightGBM (tuned)",
+  "model_size_mb": 3.8,
+  "cv_pr_auc": {"lightgbm": 0.6384, "xgboost": 0.6057, "logreg": 0.5949, "random_forest": 0.5548, "dummy": 0.2363},
+  "tuned_cv_pr_auc": {"random_forest": 0.5702, "xgboost": 0.6283, "lightgbm": 0.6298},
+  "test_metrics": {"accuracy": 0.8200, "precision": 0.6661, "recall": 0.4783, "f1": 0.5568, "roc_auc": 0.8575, "pr_auc": 0.6585},
+  "overfitting": {"pr_auc": {"train": 0.7450, "test": 0.6585}, "roc_auc": {"train": 0.9002, "test": 0.8575}, "f1": {"train": 0.6287, "test": 0.5568}},
+  "best_params_lightgbm": {"n_estimators": 300, "num_leaves": 31, "max_depth": 16, "learning_rate": 0.1, "subsample": 1.0},
+  "permutation_importance": {"track_genre": 0.3883, "instrumentalness": 0.0292, "acousticness": 0.0203, "energy": 0.0202, "duration_ms": 0.0190, "loudness": 0.0174, "valence": 0.0120, "explicit": 0.0119, "danceability": 0.0108, "liveness": 0.0084}
+}
