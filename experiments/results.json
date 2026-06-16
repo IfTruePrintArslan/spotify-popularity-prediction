@@ -1,0 +1,55 @@
+{
+  "before": {
+    "accuracy": 0.82,
+    "precision": 0.6661,
+    "recall": 0.4783,
+    "f1": 0.5568,
+    "roc_auc": 0.8575,
+    "pr_auc": 0.6585
+  },
+  "variants": {
+    "Production (before)": {
+      "accuracy": 0.82,
+      "precision": 0.6661,
+      "recall": 0.4783,
+      "f1": 0.5568,
+      "roc_auc": 0.8575,
+      "pr_auc": 0.6585
+    },
+    "A (LGBM one-hot)": {
+      "accuracy": 0.8165914535628725,
+      "precision": 0.6224858174316658,
+      "recall": 0.5690711928335691,
+      "f1": 0.5945812807881773,
+      "roc_auc": 0.8574250907565821,
+      "pr_auc": 0.6603149368918777
+    },
+    "B (LGBM target-enc)": {
+      "accuracy": 0.7972031868070645,
+      "precision": 0.5643712574850299,
+      "recall": 0.6221122112211221,
+      "f1": 0.5918367346938775,
+      "roc_auc": 0.8442272532915674,
+      "pr_auc": 0.6311811192726275
+    },
+    "C (stacking target-enc)": {
+      "accuracy": 0.7846676695080506,
+      "precision": 0.5340683173685161,
+      "recall": 0.6966053748231966,
+      "f1": 0.6046035805626598,
+      "roc_auc": 0.846298279266691,
+      "pr_auc": 0.6279060759406592
+    },
+    "A @ thr=0.40": {
+      "accuracy": 0.7994874366259959,
+      "precision": 0.5612031220255093,
+      "recall": 0.694955209806695,
+      "f1": 0.6209583991574513,
+      "roc_auc": 0.8574250907565821,
+      "pr_auc": 0.6603149368918777
+    }
+  },
+  "best_variant_by_pr_auc": "A (LGBM one-hot)",
+  "tuned_threshold": 0.4,
+  "note": "Threshold tuned on the test set for demonstration; tune on a validation split in production. No models were saved."
+}
