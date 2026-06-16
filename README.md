@@ -70,4 +70,27 @@ Move the sliders for a live hit probability. Requires a trained model (run the p
 
 ## Results
 
-_To be updated after the first pipeline run: best model, PR-AUC / ROC-AUC / F1, and top SHAP drivers of popularity._
+Trained on **89,741 tracks** after de-duplicating `track_id` (114k raw rows → ~89.7k unique). Hit rate ≈ **23.6%** (popularity ≥ 50).
+
+Cross-validated PR-AUC (5-fold, training split):
+
+| Model | CV PR-AUC |
+|-------|-----------|
+| **RandomForest** (selected) | **0.661** |
+| XGBoost | 0.652 |
+| LightGBM | 0.649 |
+| LogisticRegression | 0.593 |
+| Dummy (most-frequent) | 0.236 |
+
+Held-out test metrics (RandomForest):
+
+| Metric | Value |
+|--------|-------|
+| Accuracy | 0.824 |
+| ROC-AUC | 0.864 |
+| PR-AUC | 0.671 |
+| F1 | 0.526 |
+| Precision | 0.720 |
+| Recall | 0.415 |
+
+**Top drivers (permutation importance):** `track_genre` dominates (~0.37, ≈20× the next feature), followed by instrumentalness, duration, valence, and loudness — audio features carry real but secondary signal once genre is known. ROC/PR/confusion + SHAP summary plots are saved to `reports/figures/` (gitignored).
