@@ -31,9 +31,11 @@ macOS note: `lightgbm`/`xgboost` need OpenMP — `brew install libomp` if import
 
 Kaggle: `maharshipandya/spotify-tracks-dataset` (~114K tracks).
 
-**Option A — Kaggle API**
-1. Create a Kaggle account, then Account → "Create New Token" to download `kaggle.json`.
-2. `mkdir -p ~/.kaggle && mv ~/Downloads/kaggle.json ~/.kaggle/ && chmod 600 ~/.kaggle/kaggle.json`
+**Option A — Kaggle API** (requires `kaggle>=2.x`, already pinned)
+1. On Kaggle: **Settings → API → Create New Token**. You'll get a token like `KGAT_…` (copy it — it's shown only once).
+2. Save it where the CLI reads it automatically:
+   `mkdir -p ~/.kaggle && printf '%s' 'KGAT_your_token_here' > ~/.kaggle/access_token && chmod 600 ~/.kaggle/access_token`
+   (Alternatively: `export KAGGLE_API_TOKEN=KGAT_your_token_here`.)
 3. `kaggle datasets download -d maharshipandya/spotify-tracks-dataset -p data/raw --unzip`
 
 **Option B — Manual fallback**
