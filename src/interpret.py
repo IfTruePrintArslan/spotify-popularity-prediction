@@ -21,8 +21,14 @@ def shap_summary(pipeline, X_sample, prefix="best"):
     Xt, names = _transform(pipeline, X_sample)
     model = pipeline.named_steps["model"]
     explainer = shap.Explainer(model, Xt, feature_names=names)
-    values = explainer(Xt)
-    shap.summary_plot(values, Xt, feature_names=names, show=False)
+    # check_additivity=False: TreeExplainer's additivity check can fail on
+    # RandomForest due to tiny float-precision sums; the explanations are valid.
+    values = explainer(Xt, check_additivity=False)
+    # Binary tree classifiers return a trailing per-class axis; plot the
+    # positive ("hit") class so the beeswarm is a standard single-class view.
+    if np.asarray(values.values).ndim == 3:
+        values = values[..., 1]
+    shap.summary_plot(values, show=False)
     plt.savefig(config.FIGURES_DIR / f"{prefix}_shap_summary.png", bbox_inches="tight")
     plt.close()
     return values
