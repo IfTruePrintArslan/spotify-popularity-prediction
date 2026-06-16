@@ -28,6 +28,29 @@ TEST_SIZE = 0.2
 CV_FOLDS = 5
 
 # ---------------------------------------------------------------------------
+# Memory / runtime guards
+# ---------------------------------------------------------------------------
+# The raw training set is ~90k rows; once SMOTE oversamples the minority class
+# and the ~114 genres are one-hot encoded, the in-memory matrix gets very wide.
+# RandomizedSearchCV refits a model on every (param x fold) combination, so
+# tuning on the full set repeatedly copies that big matrix across workers and
+# exhausted RAM (the machine crashed).  We therefore tune on a STRATIFIED
+# subsample of this size, then REFIT the chosen model on the full training set.
+TUNE_SAMPLE_SIZE = 30000
+
+# Cap on parallel workers used by RandomizedSearchCV / cross_val_score.  Each
+# worker holds its own copy of the (post-SMOTE) data, so n_jobs=-1 would spawn
+# one copy per CPU core and blow up memory.  2 keeps some speed-up while
+# bounding peak RAM.  Tree estimators get their own modest n_jobs (see train.py)
+# so search-level x estimator-level parallelism does not multiply.
+SEARCH_N_JOBS = 2
+
+# n_jobs handed to the tree ensembles themselves.  Kept small so it does not
+# multiply with SEARCH_N_JOBS (2 search workers x many estimator threads each
+# would over-subscribe the CPU and duplicate data in memory).
+MODEL_N_JOBS = 2
+
+# ---------------------------------------------------------------------------
 # Directory / file paths (all derived from the project root automatically)
 # ---------------------------------------------------------------------------
 

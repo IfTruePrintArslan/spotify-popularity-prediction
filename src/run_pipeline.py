@@ -31,11 +31,12 @@ def main():
         print(f"  {name}: {score:.4f}")
         print(f"    best params: {params}")
 
-    # 3) Select the overall best tuned model and fit it on the full train set.
+    # 3) Select the overall best tuned model.  tune_model already refit it on
+    #    the FULL training set (the search itself only used a subsample to save
+    #    memory), so no extra .fit is needed here.
     best_name, best, best_params, best_score = train.best_tuned_model(tuned)
     print(f"\nSelected best tuned model: {best_name} (CV PR-AUC={best_score:.4f})")
     print(f"Best params: {best_params}")
-    best.fit(X_train, y_train)
 
     # 4) Held-out test metrics.
     y_pred = best.predict(X_test)
