@@ -11,6 +11,12 @@ from src import config
 
 
 def classification_metrics(y_true, y_pred, y_proba) -> dict:
+    """Compute the six standard binary-classification metrics and return them as a dict.
+
+    Includes accuracy, precision, recall, F1, ROC-AUC, and PR-AUC so the report
+    covers both threshold-based and ranking-based evaluation.  zero_division=0
+    avoids errors on degenerate folds where a class is never predicted.
+    """
     return {
         "accuracy": accuracy_score(y_true, y_pred),
         "precision": precision_score(y_true, y_pred, zero_division=0),
@@ -22,6 +28,12 @@ def classification_metrics(y_true, y_pred, y_proba) -> dict:
 
 
 def save_classification_plots(estimator, X_test, y_test, prefix="best"):
+    """Save confusion matrix, ROC curve, and precision-recall curve plots to disk.
+
+    Generates three standard evaluation plots using sklearn's built-in display
+    classes.  Each is saved as a PNG in the figures directory with a descriptive
+    filename so they can be dropped directly into the project report.
+    """
     config.FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     for disp, name in (
         (ConfusionMatrixDisplay.from_estimator, "confusion_matrix"),
@@ -34,6 +46,7 @@ def save_classification_plots(estimator, X_test, y_test, prefix="best"):
 
 
 def comparison_table(cv_results: dict):
+    """Convert a {model_name: cv_pr_auc} dict into a sorted DataFrame for display."""
     import pandas as pd
     return (
         pd.Series(cv_results, name="cv_pr_auc")

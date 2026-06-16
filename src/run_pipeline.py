@@ -8,6 +8,13 @@ from src import config, data, evaluate, interpret, train
 
 
 def main():
+    """Execute every stage of the pipeline end-to-end and print progress to stdout.
+
+    Stages: load -> clean -> label -> train/test split -> cross-validate all
+    models -> tune the three ensembles -> select and refit the best tuned model
+    -> evaluate on held-out test set -> overfitting report -> save plots and
+    SHAP summary -> persist the final model to disk.
+    """
     df = data.add_label(data.clean(data.load_raw()))
     X_train, X_test, y_train, y_test = data.split(df, target=config.LABEL)
 

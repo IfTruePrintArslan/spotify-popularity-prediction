@@ -53,6 +53,14 @@ class IQRCapper(BaseEstimator, TransformerMixin):
 
 
 def make_preprocessor(scale: bool) -> ColumnTransformer:
+    """Build a ColumnTransformer that preprocesses all feature groups.
+
+    Continuous features are IQR-capped then optionally scaled.
+    Discrete/binary features skip capping (it would destroy their range) and
+    are only scaled when requested.  Categorical features are one-hot encoded.
+    The transformer is returned unfitted so it can be embedded inside a
+    cross-validation or imblearn pipeline and fitted only on training data.
+    """
     # Continuous features: cap outliers first, then (optionally) scale.
     cont_steps = [("cap", IQRCapper())]
     if scale:

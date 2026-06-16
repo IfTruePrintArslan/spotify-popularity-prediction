@@ -16,6 +16,13 @@ from src.features import make_preprocessor
 
 
 def classifier_registry():
+    """Return a dict of {name: (estimator, needs_scaling)} for every candidate model.
+
+    needs_scaling is True only for Logistic Regression, which is sensitive to
+    feature scale.  Tree-based models (Random Forest, XGBoost, LightGBM) are
+    scale-invariant, so their flag is False to skip the StandardScaler step and
+    speed up the pipeline.
+    """
     rs = config.RANDOM_STATE
     # SMOTE now handles class imbalance inside the pipeline, so the estimators
     # no longer use class_weight="balanced" / scale_pos_weight.
@@ -61,6 +68,13 @@ def build_pipeline(estimator, needs_scaling: bool, use_smote: bool = True) -> Pi
 
 
 def cross_validate_models(X, y) -> dict:
+    """Run stratified k-fold CV for every model and return {name: mean_pr_auc}.
+
+    PR-AUC (average precision) is used as the scoring metric because the dataset
+    is class-imbalanced — accuracy would be misleading (a model that always
+    predicts 'not a hit' scores ~50 % accuracy for free).  PR-AUC rewards the
+    model for correctly ranking actual hits at the top.
+    """
     cv = StratifiedKFold(n_splits=config.CV_FOLDS, shuffle=True,
                          random_state=config.RANDOM_STATE)
     results = {}
@@ -74,6 +88,7 @@ def cross_validate_models(X, y) -> dict:
 
 
 def fit_model(X, y, name: str) -> Pipeline:
+    """Fit a single named model on the full (X, y) training set and return the pipeline."""
     est, scale = classifier_registry()[name]
     pipe = build_pipeline(est, scale, use_smote=(name != "dummy"))
     pipe.fit(X, y)
@@ -150,4 +165,5 @@ def best_tuned_model(tuned: dict):
 
 
 def save_pipeline(pipe: Pipeline, path=None) -> None:
+    """Serialize the fitted pipeline to disk with joblib (defaults to MODEL_PATH)."""
     joblib.dump(pipe, path or config.MODEL_PATH)
