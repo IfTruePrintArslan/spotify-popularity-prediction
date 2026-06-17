@@ -31,7 +31,7 @@ CV_FOLDS = 5
 # Memory / runtime guards
 # ---------------------------------------------------------------------------
 # The raw training set is ~90k rows; once SMOTE oversamples the minority class
-# and the ~114 genres are one-hot encoded, the in-memory matrix gets very wide.
+# and the ~113 genres are one-hot encoded, the in-memory matrix gets very wide.
 # RandomizedSearchCV refits a model on every (param x fold) combination, so
 # tuning on the full set repeatedly copies that big matrix across workers and
 # exhausted RAM (the machine crashed).  We therefore tune on a STRATIFIED
@@ -103,11 +103,12 @@ CATEGORICAL_FEATURES = ["track_genre"]
 ALL_FEATURES = NUMERIC_FEATURES + CATEGORICAL_FEATURES
 
 # Columns that exist in the raw CSV but must be dropped before modelling.
-# "Unnamed: 0" is an artifact index that Kaggle CSVs sometimes include.
+# "Unnamed: 0" and "Unnamed: 0.1" are artifact index columns that Kaggle CSVs
+# sometimes include (the raw CSV has both variants).
 # track_id, artists, album_name, track_name are unique identifiers / free-text
 # strings — keeping them would either cause data leakage or produce thousands
 # of meaningless one-hot columns.
-DROP_COLS = ["Unnamed: 0", "track_id", "artists", "album_name", "track_name"]
+DROP_COLS = ["Unnamed: 0", "Unnamed: 0.1", "track_id", "artists", "album_name", "track_name"]
 
 # ---------------------------------------------------------------------------
 # Ensure required directories exist (runs on import, harmless if they exist)

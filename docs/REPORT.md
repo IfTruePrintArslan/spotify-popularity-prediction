@@ -18,7 +18,7 @@ This report covers the full workflow: dataset description, exploratory analysis,
 
 ## 2. Problem Statement
 
-**Input:** 14 numeric audio features (such as danceability, energy, loudness) plus one categorical feature (track genre, with roughly 114 distinct values).
+**Input:** 14 numeric audio features (such as danceability, energy, loudness) plus one categorical feature (track genre, with roughly 113 distinct values).
 
 **Output:** A binary label — hit (1) or flop (0).
 
@@ -42,9 +42,9 @@ This report covers the full workflow: dataset description, exploratory analysis,
 |---|---|---|
 | Continuous numeric | duration_ms, danceability, energy, loudness, speechiness, acousticness, instrumentalness, liveness, valence, tempo | 10 |
 | Discrete / near-binary | key, mode, time_signature, explicit | 4 |
-| Categorical | track_genre (~114 genres, one-hot encoded) | 1 (expands to ~114 columns) |
+| Categorical | track_genre (113 genres, one-hot encoded) | 1 (expands to 113 columns) |
 
-**Columns dropped:** `Unnamed: 0` (Kaggle artifact index), `track_id`, `artists`, `album_name`, `track_name`. These are unique identifiers or free-text strings — keeping them would either cause data leakage (if a model memorized specific track IDs) or produce thousands of meaningless one-hot columns.
+**Columns dropped:** `Unnamed: 0`, `Unnamed: 0.1` (Kaggle artifact index columns), `track_id`, `artists`, `album_name`, `track_name`. These are unique identifiers or free-text strings — keeping them would either cause data leakage (if a model memorized specific track IDs) or produce thousands of meaningless one-hot columns.
 
 ---
 
@@ -76,7 +76,7 @@ The preprocessing pipeline is defined in `src/features.py` and `src/data.py`, wi
 
 **Step 3 — Drop missing values:** Remove rows where any feature or the target is NaN. A small fraction of tracks have missing audio features; imputation was not necessary at this dataset size.
 
-**Step 4 — Drop identifier columns:** Remove `Unnamed: 0`, `track_id`, `artists`, `album_name`, `track_name` — these carry no predictive signal and would cause leakage or noise.
+**Step 4 — Drop identifier columns:** Remove `Unnamed: 0`, `Unnamed: 0.1`, `track_id`, `artists`, `album_name`, `track_name` — these carry no predictive signal and would cause leakage or noise.
 
 **Step 5 — IQR outlier capping (continuous features only):** For each continuous feature, compute the 25th and 75th percentiles (Q1, Q3) and the interquartile range (IQR = Q3 - Q1). Values below Q1 - 1.5xIQR or above Q3 + 1.5xIQR are clipped to those bounds (winsorization).
 
@@ -90,7 +90,7 @@ Why only continuous features? The discrete features (`key`, `mode`, `time_signat
 
 Critically, SMOTE is placed inside the `imblearn` Pipeline so it is fitted only on each training fold during cross-validation and never sees validation or test data. Applying SMOTE before the split would leak information about the minority class distribution into the validation fold and inflate performance estimates.
 
-**Step 9 — Hyperparameter tuning subsample:** Hyperparameter search (RandomizedSearchCV) is expensive because it refits the full pipeline for every parameter combination across every CV fold. To avoid running out of memory with 90k rows and ~114 one-hot genre columns, tuning is done on a stratified 30,000-row subsample. The winning parameters are then used to refit the model on the full training set, so the final model benefits from all available data.
+**Step 9 — Hyperparameter tuning subsample:** Hyperparameter search (RandomizedSearchCV) is expensive because it refits the full pipeline for every parameter combination across every CV fold. To avoid running out of memory with 90k rows and 113 one-hot genre columns, tuning is done on a stratified 30,000-row subsample. The winning parameters are then used to refit the model on the full training set, so the final model benefits from all available data.
 
 ---
 
@@ -180,6 +180,16 @@ The model performs better on training data than on test data — this is expecte
 | 10 | liveness | 0.0084 |
 
 `track_genre` dominates by a very wide margin — its combined permutation importance (0.3883) is more than 13 times the next feature (instrumentalness at 0.0292). This means that genre alone explains most of what the model has learned: knowing a song's genre tells you a great deal about how popular it is likely to be on Spotify. The audio features carry real but secondary signal — once genre is accounted for, instrumentalness, acousticness, and energy add meaningful further discrimination. SHAP TreeExplainer analysis confirms this hierarchy (see `reports/figures/best_shap_summary.png`).
+
+### Evaluation Figures
+
+![Confusion matrix on the held-out test set.](reports/figures/best_confusion_matrix.png)
+
+![ROC curve (ROC-AUC = 0.858).](reports/figures/best_roc_curve.png)
+
+![Precision-Recall curve (PR-AUC = 0.659).](reports/figures/best_pr_curve.png)
+
+![SHAP summary — feature impact on hit predictions (track_genre dominates).](reports/figures/best_shap_summary.png)
 
 ---
 

@@ -1,0 +1,348 @@
+/* Research-paper style sheet for the Spotify popularity report.
+   Used only for the HTML -> Chrome PDF build; DOCX ignores it. */
+
+@page {
+  size: A4;
+  margin: 1in;
+  @bottom-center {
+    content: counter(page);
+    font-family: "Times New Roman", Times, serif;
+    font-size: 10pt;
+    color: #333;
+  }
+}
+
+/* No page number on the title page. */
+@page:first {
+  @bottom-center { content: normal; }
+}
+
+/* Restart page numbering at "1" on the first content page (the Abstract).
+   The Abstract box is assigned to a named page (see .abstract-section below);
+   resetting the page counter in this named @page context is the reliable
+   weasyprint mechanism (box-level counter-reset on the page counter is
+   ignored by the page-margin boxes). */
+@page restart {
+  counter-reset: page 1;
+}
+
+html {
+  font-size: 11.5pt;
+}
+
+body {
+  font-family: "Times New Roman", Times, serif;
+  line-height: 1.5;
+  color: #1a1a1a;
+  text-align: justify;
+  hyphens: auto;
+  margin: 0;
+  padding: 0;
+}
+
+/* Front-matter order (title page -> abstract -> TOC -> sections) is now set
+   by the build itself: front_matter.md is injected via --include-before-body,
+   so it precedes the auto-generated TOC and the section body in source order.
+   No flex reordering is needed (weasyprint paginates in document order). */
+
+/* Hide pandoc's auto title-block header: the custom title page below
+   already presents the title, so this avoids a duplicate heading. */
+#title-block-header {
+  display: none;
+}
+
+/* ---------- Title page ---------- */
+.title-page {
+  text-align: center;
+  page-break-after: always;
+  padding-top: 0.15in;
+}
+
+.title-page .logo {
+  width: 170px;
+  margin: 0 auto 0.4em auto;
+}
+
+.title-page .university {
+  font-size: 22pt;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  margin: 0 0 0.2em 0;
+}
+
+.title-page .faculty {
+  font-size: 14pt;
+  margin: 0 0 0 0;
+}
+
+.title-page .course-block {
+  margin-top: 0.7in;
+}
+
+.title-page .course-name {
+  font-size: 15pt;
+  font-style: italic;
+  margin: 0;
+}
+
+.title-page .course-project {
+  font-size: 13pt;
+  margin: 0.2em 0 0 0;
+}
+
+.title-page .project-title {
+  font-size: 21pt;
+  font-weight: 700;
+  line-height: 1.3;
+  margin: 0.55in auto 0 auto;
+  max-width: 85%;
+}
+
+.title-page .presented-by {
+  font-size: 13pt;
+  font-weight: 700;
+  margin-top: 0.5in;
+  margin-bottom: 0.4em;
+}
+
+.title-page table.authors {
+  margin: 0 auto;
+  border-collapse: collapse;
+  border: none;
+}
+
+.title-page table.authors td {
+  border: none;
+  padding: 4px 22px;
+  font-size: 13pt;
+}
+
+/* Force the title-page authors table to stay transparent so the content-table
+   zebra striping can never leak a grey band behind an author row. */
+.authors,
+.authors tr,
+.authors td {
+  background: transparent !important;
+  border: none !important;
+}
+
+.title-page table.authors .author-name {
+  text-align: right;
+  font-weight: 600;
+}
+
+.title-page table.authors .author-roll {
+  text-align: left;
+  font-family: "Times New Roman", Times, serif;
+}
+
+.title-page .date {
+  font-size: 13pt;
+  font-weight: 600;
+  margin-top: 0.6in;
+}
+
+/* ---------- Abstract ---------- */
+/* Restart page numbering on the Abstract (first page after the unnumbered
+   title page) so its footer reads "1". counter-reset sets the value at the
+   start of this element's page; tuned by build verification. */
+.abstract-section {
+  page-break-after: always;
+  page: restart;
+}
+
+.abstract-section h2 {
+  text-align: center;
+  border: none;
+  font-size: 16pt;
+  margin-top: 0.4in;
+  margin-bottom: 0.5em;
+}
+
+.abstract-section p {
+  text-align: justify;
+}
+
+/* ---------- Table of contents ---------- */
+#TOC, nav#TOC {
+  page-break-after: always;
+}
+
+/* Formal "Table of Contents" heading at the top of the TOC page. */
+nav#TOC::before {
+  content: "Table of Contents";
+  display: block;
+  font-family: "Times New Roman", Times, serif;
+  font-size: 20pt;
+  font-weight: 700;
+  text-align: center;
+  margin-bottom: 1em;
+}
+
+nav#TOC ul {
+  list-style: none;
+  padding-left: 0;
+  margin: 0;
+}
+
+nav#TOC > ul {
+  padding-left: 0;
+}
+
+/* pandoc nests the whole TOC under the document's H1 ("Spotify Hit
+   Prediction — Project Report"). That stray wrapper entry is hidden so the
+   numbered sections become the visible top-level entries; its child <ul>
+   is promoted back to flush-left via negative-margin compensation below. */
+nav#TOC > ul > li > a {
+  display: none;
+}
+
+/* Each TOC entry is a normal-flow block line. Using display:block (NOT flex)
+   keeps the anchor in inline flow so weasyprint's leader() can expand and fill
+   the line to the right margin, with the target page number flush right. */
+nav#TOC a {
+  color: #1a1a1a;
+  text-decoration: none;
+  display: block;
+  width: 100%;
+  line-height: 1.9;
+}
+
+/* Dot leaders + real page number (weasyprint GCPM leader/target-counter).
+   leader('.') fills the remaining width with dots; target-counter pins the
+   page number at the right margin. */
+nav#TOC a::after {
+  content: leader('.') target-counter(attr(href url), page);
+}
+
+/* Top-level numbered sections (1.–9.): bold, flush left. */
+nav#TOC > ul > li > ul {
+  padding-left: 0;
+}
+
+nav#TOC > ul > li > ul > li > a {
+  font-weight: 700;
+}
+
+/* Sub-entries (e.g. "Evaluation Figures"): indented, normal weight. */
+nav#TOC > ul > li > ul > li > ul {
+  padding-left: 1.8em;
+}
+
+nav#TOC > ul > li > ul > li > ul > li > a {
+  font-weight: 400;
+}
+
+/* ---------- Headings ---------- */
+h1, h2, h3, h4 {
+  font-family: "Times New Roman", Times, serif;
+  color: #111;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+h1 {
+  font-size: 19pt;
+  text-align: center;
+  margin-bottom: 0.2em;
+}
+
+h2 {
+  font-size: 15pt;
+  margin-top: 1.1em;
+  border-bottom: 1px solid #999;
+  padding-bottom: 2px;
+}
+
+h3 {
+  font-size: 12.5pt;
+  margin-top: 0.9em;
+}
+
+/* keep headings with following content */
+h2, h3, h4 {
+  page-break-after: avoid;
+}
+
+p {
+  margin: 0.5em 0;
+  orphans: 3;
+  widows: 3;
+}
+
+/* ---------- Tables ---------- */
+table {
+  border-collapse: collapse;
+  width: 100%;
+  margin: 1em 0;
+  font-size: 10.5pt;
+  page-break-inside: avoid;
+}
+
+th, td {
+  border: 1px solid #999;
+  padding: 5px 8px;
+  text-align: center;
+}
+
+thead th {
+  background-color: #e8e8e8;
+  font-weight: 700;
+}
+
+/* left-align the first column (labels) for readability */
+table:not(.authors) td:first-child,
+table:not(.authors) th:first-child {
+  text-align: left;
+}
+
+/* Zebra striping for real data tables only; never the title-page authors table. */
+table:not(.authors) tbody tr:nth-child(even),
+table:not(.authors) tr:nth-child(even) {
+  background-color: #f4f4f4;
+}
+
+/* ---------- Figures ---------- */
+figure {
+  text-align: center;
+  margin: 1.2em auto;
+  page-break-inside: avoid;
+}
+
+figure img,
+img {
+  display: block;
+  margin: 0 auto;
+  max-width: 85%;
+  height: auto;
+}
+
+figcaption {
+  font-style: italic;
+  font-size: 10pt;
+  text-align: center;
+  color: #333;
+  margin-top: 0.4em;
+}
+
+/* fallback when image caption is rendered as emphasis */
+img + em {
+  display: block;
+  font-style: italic;
+  font-size: 10pt;
+  text-align: center;
+  color: #333;
+  margin-top: 0.4em;
+}
+
+hr {
+  border: none;
+  border-top: 1px solid #ccc;
+  margin: 1.5em 0;
+}
+
+code, pre, tt {
+  font-family: "Courier New", monospace;
+  font-weight: bold;
+  font-size: 0.92em;
+}
