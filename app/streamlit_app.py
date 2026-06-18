@@ -77,25 +77,40 @@ with tab_predict:
 
     with col_left:
         danceability     = st.slider("Danceability",        0.0,   1.0,    0.6)
+        st.caption("How suited the track is for dancing (0–1) — based on tempo, rhythm, and beat strength.")
         energy           = st.slider("Energy",              0.0,   1.0,    0.7)
+        st.caption("Intensity and activity (0–1) — loud, fast, noisy tracks score high.")
         loudness         = st.slider("Loudness (dB)",     -60.0,   2.0,   -6.0)
+        st.caption("Average loudness in decibels (−60 to +2); closer to 0 is louder.")
         speechiness      = st.slider("Speechiness",         0.0,   1.0,    0.05)
+        st.caption("Presence of spoken words (0–1); above ~0.66 is mostly speech (e.g. rap, podcast).")
         acousticness     = st.slider("Acousticness",        0.0,   1.0,    0.2)
+        st.caption("Confidence the track is acoustic (0–1); 1 = very acoustic.")
         instrumentalness = st.slider("Instrumentalness",    0.0,   1.0,    0.0)
+        st.caption("Likelihood the track has no vocals (0–1); above 0.5 is likely instrumental.")
         liveness         = st.slider("Liveness",            0.0,   1.0,    0.15)
+        st.caption("Presence of a live audience (0–1); above 0.8 suggests a live recording.")
 
     with col_right:
         valence        = st.slider("Valence",               0.0,   1.0,    0.5)
+        st.caption("Musical positivity / mood (0–1); high = happy/cheerful, low = sad/angry.")
         tempo          = st.slider("Tempo (BPM)",          40.0, 220.0,  120.0)
+        st.caption("Speed of the track in beats per minute.")
         duration_ms    = st.slider("Duration (ms)",       30000, 600000, 200000)
+        st.caption("Track length in milliseconds (200000 ≈ 3 min 20 sec).")
         key            = st.slider("Key",                     0,    11,      1)
+        st.caption("Musical key as a pitch class 0–11 (0 = C, 1 = C♯/D♭, … 11 = B).")
         mode           = st.selectbox("Mode",              [0, 1],    index=1)
+        st.caption("Scale type: 1 = major (brighter), 0 = minor (darker).")
         time_signature = st.selectbox("Time Signature",   [3, 4, 5], index=1)
+        st.caption("Beats per bar (e.g. 4 = common 4/4 time).")
         explicit       = int(st.checkbox("Explicit",      value=False))
+        st.caption("Whether the track has explicit lyrics.")
         track_genre    = st.selectbox(
             "Genre",
             ["pop", "rock", "hip-hop", "edm", "classical", "jazz"],
         )
+        st.caption("The track's genre — the strongest predictor of popularity in this model.")
 
     inputs = {
         "danceability":     danceability,
@@ -264,16 +279,28 @@ with tab_figures:
 
 with tab_eda:
     st.header("Exploratory Data Analysis")
+    st.markdown(
+        "This section mirrors the full EDA from `notebooks/01_eda.ipynb`, "
+        "covering dataset overview, feature distributions, target analysis, "
+        "feature relationships, and categorical/discrete feature summaries."
+    )
+
+    import matplotlib.pyplot as plt
+    import seaborn as sns
+    import numpy as np
+
+    # Cache both raw and cleaned data so they load once per session.
+    @st.cache_data
+    def load_eda_raw():
+        """Load the raw dataset (before cleaning) for overview stats."""
+        from src.data import load_raw
+        return load_raw()
 
     @st.cache_data
-    def load_eda_data(max_rows: int = 20000):
-        """Load, clean, and label the raw dataset; sample for EDA performance."""
+    def load_eda_clean():
+        """Load, clean, and label the full dataset for analysis."""
         from src.data import load_raw, clean, add_label
-
-        df = add_label(clean(load_raw()))
-        if len(df) > max_rows:
-            df = df.sample(n=max_rows, random_state=config.RANDOM_STATE)
-        return df
+        return add_label(clean(load_raw()))
 
     if not config.RAW_CSV.exists():
         st.info(
@@ -282,63 +309,509 @@ with tab_eda:
         )
     else:
         try:
-            df_eda = load_eda_data()
-        except Exception as exc:
-            st.error(f"Could not load dataset: {exc}")
-            df_eda = None
+            df_raw = load_eda_raw()
+            df_eda = load_eda_clean()
+            _load_ok = True
+        except Exception as _exc:
+            st.error(f"Could not load dataset: {_exc}")
+            _load_ok = False
 
-        if df_eda is not None:
-            n_shown = len(df_eda)
-            st.caption(
-                f"Charts based on a random sample of {n_shown:,} rows "
-                "(capped at 20,000 for dashboard performance)."
+        if _load_ok:
+
+            # ---------------------------------------------------------------
+            # Section 1 — Dataset Overview
+            # ---------------------------------------------------------------
+            st.subheader("1. Dataset Overview")
+            st.markdown(
+                "We load the **raw** CSV first — before any cleaning — to see it "
+                "exactly as delivered. Then we build the cleaned + labeled "
+                "dataframe used throughout the rest of the EDA."
             )
 
-            import matplotlib.pyplot as plt
-            import seaborn as sns
+            # Shape metrics
+            col_r, col_c = st.columns(2)
+            col_r.metric("Raw Rows", f"{df_raw.shape[0]:,}")
+            col_c.metric("Raw Columns", f"{df_raw.shape[1]}")
 
-            # --- Popularity distribution ---
-            st.subheader("Popularity Distribution")
-            fig1, ax1 = plt.subplots(figsize=(6, 4))
-            ax1.hist(df_eda[config.TARGET], bins=50, edgecolor="white")
-            ax1.axvline(config.HIT_THRESHOLD, color="red", linestyle="--",
-                        label=f"Hit threshold ({config.HIT_THRESHOLD})")
-            ax1.set_xlabel("Popularity")
-            ax1.set_ylabel("Count")
-            ax1.set_title("Popularity Distribution")
-            ax1.legend()
-            st.pyplot(fig1, use_container_width=False)
-            plt.close(fig1)
-
-            # --- Hit / flop count ---
-            st.subheader("Hit vs. Flop Count")
-            label_counts = df_eda[config.LABEL].value_counts().rename(
-                index={0: "Flop", 1: "Hit"}
+            st.markdown("**Column dtypes**")
+            st.dataframe(
+                df_raw.dtypes.rename("dtype").to_frame(),
+                use_container_width=False,
             )
-            st.bar_chart(label_counts)
 
-            # --- Numeric correlation heatmap ---
-            st.subheader("Numeric Feature Correlation")
-            corr = df_eda[config.NUMERIC_FEATURES].corr()
-            fig2, ax2 = plt.subplots(figsize=(7, 5))
-            sns.heatmap(
-                corr, annot=True, fmt=".2f", cmap="coolwarm",
-                center=0, linewidths=0.4, ax=ax2,
+            # Missing values
+            st.markdown(
+                "**Missing values per column** — a missing-value audit is the "
+                "first thing to check after loading. Missing values can distort "
+                "distributions and break models if not handled."
             )
-            ax2.set_title("Pearson Correlation — Numeric Features")
+            _missing = df_raw.isnull().sum()
+            _missing_pct = (_missing / len(df_raw) * 100).round(2)
+            _missing_df = pd.DataFrame(
+                {"missing_count": _missing, "missing_pct_%": _missing_pct}
+            )
+            st.dataframe(_missing_df, use_container_width=False)
+
+            # Duplicate count (computed on raw)
+            _exact_dups = int(df_raw.duplicated().sum())
+            _trackid_dups = int(df_raw.duplicated(subset="track_id", keep="first").sum())
+            st.markdown(
+                f"**Duplicate rows:** {_exact_dups:,} exact duplicates. "
+                f"**Duplicate track IDs** (same song, multiple genres): "
+                f"{_trackid_dups:,} ({_trackid_dups / len(df_raw) * 100:.1f}% of raw rows). "
+                "These are removed during cleaning."
+            )
+
+            # Cleaned shape
+            _rows_removed = len(df_raw) - len(df_eda)
+            st.markdown(
+                f"**Cleaned shape:** {df_eda.shape[0]:,} rows x {df_eda.shape[1]} columns "
+                f"({_rows_removed:,} rows removed). "
+                "The `hit` column was added: 1 if popularity >= "
+                f"{config.HIT_THRESHOLD}, else 0."
+            )
+
+            # Summary statistics
+            st.markdown(
+                "**Summary statistics** — mean, median, std, min/max, and "
+                "quartiles for every numeric column. Notice the large scale "
+                "difference between `duration_ms` and the 0-1 bounded features."
+            )
+            _stats_cols = config.NUMERIC_FEATURES + [config.TARGET]
+            _stats = df_eda[_stats_cols].describe().T
+            _stats["median"] = df_eda[_stats_cols].median()
+            _stats = _stats[["count", "mean", "median", "std", "min", "25%", "75%", "max"]]
+            st.dataframe(_stats.round(3), use_container_width=False)
+
+            # ---------------------------------------------------------------
+            # Section 2 — Feature Distributions
+            # ---------------------------------------------------------------
+            st.subheader("2. Feature Distributions")
+            st.markdown(
+                "Understanding how each feature is distributed helps decide on "
+                "preprocessing steps like scaling or log-transformation. Highly "
+                "skewed features may mislead linear models if left untreated."
+            )
+
+            # --- 2.1 Histograms of continuous features ---
+            st.markdown(
+                "**2.1 Histograms of continuous features** — each bar represents "
+                "a bin of values. A tall bar means many tracks fall in that range. "
+                "All 10 continuous features are shown in a grid."
+            )
+            _n_cont = len(config.CONTINUOUS_FEATURES)
+            _n_cols_hist = 2
+            _n_rows_hist = (_n_cont + _n_cols_hist - 1) // _n_cols_hist
+
+            fig_hist, axes_hist = plt.subplots(
+                _n_rows_hist, _n_cols_hist, figsize=(10, _n_rows_hist * 2.8)
+            )
+            axes_hist = axes_hist.flatten()
+            for _i, _feat in enumerate(config.CONTINUOUS_FEATURES):
+                axes_hist[_i].hist(
+                    df_eda[_feat].dropna(), bins=50,
+                    color="steelblue", edgecolor="white", alpha=0.85
+                )
+                axes_hist[_i].set_title(_feat, fontsize=10)
+                axes_hist[_i].set_xlabel(_feat, fontsize=9)
+                axes_hist[_i].set_ylabel("Count", fontsize=9)
+            for _j in range(_i + 1, len(axes_hist)):
+                axes_hist[_j].set_visible(False)
+            fig_hist.suptitle("Histograms — Continuous Features", fontsize=12, y=1.01)
             plt.tight_layout()
-            st.pyplot(fig2, use_container_width=False)
-            plt.close(fig2)
+            st.pyplot(fig_hist, use_container_width=False)
+            plt.close(fig_hist)
 
-            # --- Top-15 genres ---
-            st.subheader("Top 15 Genres by Track Count")
-            top_genres = (
-                df_eda["track_genre"]
-                .value_counts()
-                .head(15)
-                .rename("Track Count")
+            # --- 2.2 Skewness bar chart ---
+            st.markdown(
+                "**2.2 Skewness** — measures asymmetry. |skew| > 1 is highly "
+                "skewed (red), |skew| > 0.5 is moderately skewed (orange). "
+                "Features like `speechiness`, `instrumentalness`, and `liveness` "
+                "are right-skewed because most songs have low values but a few "
+                "have very high ones. The pipeline applies IQR winsorization to "
+                "continuous features to reduce the effect of these extreme values."
             )
-            st.bar_chart(top_genres)
+            _skew_vals = df_eda[config.CONTINUOUS_FEATURES].skew().sort_values(
+                ascending=False
+            )
+            fig_skew, ax_skew = plt.subplots(figsize=(6, 4))
+            _skew_colors = [
+                "tomato" if abs(v) > 1 else ("orange" if abs(v) > 0.5 else "steelblue")
+                for v in _skew_vals
+            ]
+            ax_skew.barh(_skew_vals.index, _skew_vals.values, color=_skew_colors)
+            ax_skew.axvline(0, color="black", linewidth=0.8)
+            ax_skew.set_xlabel("Skewness")
+            ax_skew.set_title("Feature Skewness  (red=|skew|>1, orange=|skew|>0.5)")
+            plt.tight_layout()
+            st.pyplot(fig_skew, use_container_width=False)
+            plt.close(fig_skew)
+
+            # Skewness table
+            _skew_df = _skew_vals.rename("skewness").to_frame()
+            _skew_df["flag"] = _skew_df["skewness"].abs().apply(
+                lambda x: "HIGH" if x > 1 else ("MODERATE" if x > 0.5 else "low")
+            )
+            st.dataframe(_skew_df.round(3), use_container_width=False)
+
+            # --- 2.3 Boxplots ---
+            st.markdown(
+                "**2.3 Boxplots** — the box spans the IQR (25th–75th percentile), "
+                "the line is the median, whiskers extend 1.5x IQR, and dots beyond "
+                "are outliers. Features with many outlier dots receive IQR "
+                "winsorization (capping) in the pipeline."
+            )
+            fig_box, axes_box = plt.subplots(
+                _n_rows_hist, _n_cols_hist, figsize=(10, _n_rows_hist * 2.8)
+            )
+            axes_box = axes_box.flatten()
+            for _i, _feat in enumerate(config.CONTINUOUS_FEATURES):
+                axes_box[_i].boxplot(
+                    df_eda[_feat].dropna(), vert=True, patch_artist=True,
+                    boxprops=dict(facecolor="steelblue", alpha=0.6),
+                    medianprops=dict(color="red", linewidth=2),
+                    flierprops=dict(marker=".", markersize=2, alpha=0.3),
+                )
+                axes_box[_i].set_title(_feat, fontsize=10)
+                axes_box[_i].set_ylabel(_feat, fontsize=9)
+                axes_box[_i].set_xticks([])
+            for _j in range(_i + 1, len(axes_box)):
+                axes_box[_j].set_visible(False)
+            fig_box.suptitle(
+                "Boxplots — Continuous Features (outliers as dots)",
+                fontsize=12, y=1.01
+            )
+            plt.tight_layout()
+            st.pyplot(fig_box, use_container_width=False)
+            plt.close(fig_box)
+
+            # ---------------------------------------------------------------
+            # Section 3 — Target & Class Imbalance
+            # ---------------------------------------------------------------
+            st.subheader("3. Target Variable — Popularity & Class Imbalance")
+            st.markdown(
+                "Our target is `popularity` (0-100, continuous). We binarize it "
+                f"into `hit` using a threshold of **{config.HIT_THRESHOLD}**. "
+                "Understanding the distribution and class balance is critical "
+                "before modeling — imbalanced classes require special handling."
+            )
+
+            # --- 3.1 Popularity histogram with threshold line ---
+            st.markdown(
+                "**3.1 Popularity distribution** — the red dashed line marks the "
+                "hit/flop threshold. Most tracks cluster below it, revealing a "
+                "left-skewed popularity distribution."
+            )
+            _pop_mean = df_eda[config.TARGET].mean()
+            _pop_med = df_eda[config.TARGET].median()
+            fig_pop, ax_pop = plt.subplots(figsize=(6, 4))
+            ax_pop.hist(
+                df_eda[config.TARGET], bins=60,
+                color="steelblue", edgecolor="white", alpha=0.85
+            )
+            ax_pop.axvline(
+                config.HIT_THRESHOLD, color="red", linewidth=2, linestyle="--",
+                label=f"Hit threshold = {config.HIT_THRESHOLD}"
+            )
+            ax_pop.set_xlabel("Popularity (0-100)")
+            ax_pop.set_ylabel("Number of Tracks")
+            ax_pop.set_title("Distribution of Track Popularity")
+            ax_pop.legend()
+            plt.tight_layout()
+            st.pyplot(fig_pop, use_container_width=False)
+            plt.close(fig_pop)
+            st.caption(
+                f"Mean popularity: {_pop_mean:.2f}  |  "
+                f"Median: {_pop_med:.2f}  |  "
+                f"Std dev: {df_eda[config.TARGET].std():.2f}"
+            )
+
+            # --- 3.2 Hit vs Flop count bar ---
+            st.markdown(
+                "**3.2 Class imbalance** — if one class greatly outnumbers the "
+                "other, a naive model can reach high accuracy just by always "
+                "predicting the majority class. That is why we use SMOTE "
+                "oversampling and evaluate with precision/recall in addition "
+                "to accuracy."
+            )
+            _class_counts = df_eda[config.LABEL].value_counts().sort_index()
+            _hit_rate = df_eda[config.LABEL].mean()
+            _imbalance_ratio = _class_counts[0] / _class_counts[1]
+            _class_labels = ["Flop (0)", "Hit (1)"]
+
+            fig_cls, ax_cls = plt.subplots(figsize=(5, 4))
+            _bars = ax_cls.bar(
+                _class_labels, _class_counts.values,
+                color=["coral", "steelblue"], edgecolor="white", width=0.5
+            )
+            for _bar, _cnt in zip(_bars, _class_counts.values):
+                ax_cls.text(
+                    _bar.get_x() + _bar.get_width() / 2,
+                    _bar.get_height() + 200,
+                    f"{_cnt:,}", ha="center", va="bottom", fontsize=10
+                )
+            ax_cls.set_ylabel("Number of Tracks")
+            ax_cls.set_title(f"Class Balance  (threshold = {config.HIT_THRESHOLD})")
+            plt.tight_layout()
+            st.pyplot(fig_cls, use_container_width=False)
+            plt.close(fig_cls)
+            st.caption(
+                f"Hit rate: {_hit_rate * 100:.1f}%  |  "
+                f"Flop:Hit ratio: {_imbalance_ratio:.2f}:1  |  "
+                "SMOTE is applied during training to balance the classes."
+            )
+
+            # ---------------------------------------------------------------
+            # Section 4 — Feature Relationships
+            # ---------------------------------------------------------------
+            st.subheader("4. Feature–Target Relationships")
+            st.markdown(
+                "We now explore how individual features relate to `popularity`. "
+                "This guides feature selection and helps explain model predictions."
+            )
+
+            # --- 4.1 Correlation heatmap (lower triangle) ---
+            st.markdown(
+                "**4.1 Correlation heatmap** — Pearson correlation ranges from "
+                "-1 (perfect negative) to +1 (perfect positive). Pairs near ±1 "
+                "indicate redundancy; pairs near 0 are linearly independent. "
+                "The lower triangle is shown to avoid redundancy."
+            )
+            _corr_cols = config.NUMERIC_FEATURES + [config.TARGET]
+            _corr_matrix = df_eda[_corr_cols].corr()
+            _mask = np.triu(np.ones_like(_corr_matrix, dtype=bool))
+
+            fig_heat, ax_heat = plt.subplots(figsize=(8, 6))
+            sns.heatmap(
+                _corr_matrix,
+                mask=_mask,
+                annot=True,
+                fmt=".2f",
+                cmap="coolwarm",
+                center=0,
+                linewidths=0.5,
+                ax=ax_heat,
+                annot_kws={"size": 7},
+            )
+            ax_heat.set_title("Pearson Correlation Matrix (lower triangle)", fontsize=11)
+            plt.tight_layout()
+            st.pyplot(fig_heat, use_container_width=False)
+            plt.close(fig_heat)
+
+            # --- 4.2 Per-feature correlation with target ---
+            st.markdown(
+                "**4.2 Per-feature correlation with popularity** — a sorted bar "
+                "chart shows which features have the strongest linear relationship "
+                "with the target. All values are low (|r| < 0.15), confirming "
+                "this is a non-linear problem suited to tree-based models."
+            )
+            _target_corr = (
+                df_eda[config.NUMERIC_FEATURES]
+                .corrwith(df_eda[config.TARGET])
+                .sort_values()
+            )
+            _tc_colors = [
+                "tomato" if v < 0 else "steelblue" for v in _target_corr
+            ]
+            fig_tc, ax_tc = plt.subplots(figsize=(6, 4))
+            ax_tc.barh(_target_corr.index, _target_corr.values, color=_tc_colors)
+            ax_tc.axvline(0, color="black", linewidth=0.8)
+            ax_tc.set_xlabel("Pearson Correlation with Popularity")
+            ax_tc.set_title("Feature Correlation with Target (popularity)")
+            plt.tight_layout()
+            st.pyplot(fig_tc, use_container_width=False)
+            plt.close(fig_tc)
+
+            # --- 4.3 Scatter plots (sampled) ---
+            _SCATTER_N = 5000
+            st.markdown(
+                f"**4.3 Scatter plots** — key features vs popularity. "
+                f"A random sample of {_SCATTER_N:,} rows is used for rendering "
+                "speed (noted here). A red trend line (linear fit) is overlaid "
+                "on each plot."
+            )
+            _SCATTER_FEATURES = [
+                "loudness", "danceability", "energy", "acousticness"
+            ]
+            _df_scat = df_eda.sample(
+                n=min(_SCATTER_N, len(df_eda)), random_state=config.RANDOM_STATE
+            )
+
+            fig_scat, axes_scat = plt.subplots(2, 2, figsize=(9, 6))
+            axes_scat = axes_scat.flatten()
+            for _i, _feat in enumerate(_SCATTER_FEATURES):
+                _x = _df_scat[_feat].values
+                _y = _df_scat[config.TARGET].values
+                _valid = ~(np.isnan(_x) | np.isnan(_y))
+                axes_scat[_i].scatter(
+                    _x[_valid], _y[_valid],
+                    alpha=0.15, s=8, color="steelblue"
+                )
+                _m, _b = np.polyfit(_x[_valid], _y[_valid], 1)
+                _xl = np.linspace(_x[_valid].min(), _x[_valid].max(), 100)
+                axes_scat[_i].plot(_xl, _m * _xl + _b, color="red", linewidth=1.5,
+                                   label="trend")
+                axes_scat[_i].set_xlabel(_feat, fontsize=9)
+                axes_scat[_i].set_ylabel("Popularity", fontsize=9)
+                axes_scat[_i].set_title(f"{_feat} vs Popularity", fontsize=10)
+                axes_scat[_i].legend(fontsize=8)
+            fig_scat.suptitle(
+                f"Scatter Plots — Key Features vs Popularity  "
+                f"(sample n={_SCATTER_N:,})",
+                fontsize=11
+            )
+            plt.tight_layout()
+            st.pyplot(fig_scat, use_container_width=False)
+            plt.close(fig_scat)
+
+            # --- 4.4 Pairplot (sampled) ---
+            _PAIRPLOT_N = 1500
+            _PAIRPLOT_FEATURES = [
+                "danceability", "energy", "loudness",
+                "acousticness", "instrumentalness"
+            ]
+            st.markdown(
+                f"**4.4 Pairplot** — every pairwise scatter plus diagonal KDE, "
+                "color-coded by Hit/Flop class. This is the most comprehensive "
+                "view of feature interactions. "
+                f"Sampled to {_PAIRPLOT_N:,} rows and 5 features for speed."
+            )
+            _df_pair = df_eda[_PAIRPLOT_FEATURES + [config.LABEL]].sample(
+                n=min(_PAIRPLOT_N, len(df_eda)), random_state=config.RANDOM_STATE
+            ).copy()
+            _df_pair["Class"] = _df_pair[config.LABEL].map({0: "Flop", 1: "Hit"})
+
+            _g = sns.pairplot(
+                _df_pair,
+                hue="Class",
+                vars=_PAIRPLOT_FEATURES,
+                palette={"Flop": "coral", "Hit": "steelblue"},
+                plot_kws={"alpha": 0.25, "s": 10},
+                diag_kind="kde",
+            )
+            _g.fig.suptitle(
+                f"Pairplot — {', '.join(_PAIRPLOT_FEATURES)}  "
+                f"(n={_PAIRPLOT_N:,} sample, colored by Hit/Flop)",
+                y=1.01, fontsize=10
+            )
+            st.pyplot(_g.fig, use_container_width=False)
+            plt.close(_g.fig)
+
+            # ---------------------------------------------------------------
+            # Section 5 — Discrete & Categorical Features
+            # ---------------------------------------------------------------
+            st.subheader("5. Discrete & Categorical Features")
+            st.markdown(
+                "Discrete features (`key`, `mode`, `time_signature`, `explicit`) "
+                "take only a small number of integer values. Countplots show "
+                "distribution by class. For `track_genre` we look at track count, "
+                "mean popularity, and hit rate."
+            )
+
+            # --- 5.1 Countplots for discrete features ---
+            st.markdown(
+                "**5.1 Countplots — discrete features** colored by Hit/Flop. "
+                "For example, explicit tracks and those in mode 1 (major key) "
+                "tend to be hits more often."
+            )
+            _df_disc = df_eda.copy()
+            _df_disc["Class"] = _df_disc[config.LABEL].map({0: "Flop", 1: "Hit"})
+
+            _n_disc = len(config.DISCRETE_FEATURES)
+            fig_disc, axes_disc = plt.subplots(1, _n_disc, figsize=(5 * _n_disc, 4))
+            for _i, _feat in enumerate(config.DISCRETE_FEATURES):
+                sns.countplot(
+                    data=_df_disc,
+                    x=_feat,
+                    hue="Class",
+                    palette={"Flop": "coral", "Hit": "steelblue"},
+                    ax=axes_disc[_i],
+                    order=sorted(_df_disc[_feat].unique()),
+                )
+                axes_disc[_i].set_title(f"Count by {_feat}", fontsize=10)
+                axes_disc[_i].set_xlabel(_feat, fontsize=9)
+                axes_disc[_i].set_ylabel("Count", fontsize=9)
+                axes_disc[_i].legend(title="Class", fontsize=8)
+            fig_disc.suptitle(
+                "Countplots — Discrete Features (colored by Hit/Flop)", fontsize=11
+            )
+            plt.tight_layout()
+            st.pyplot(fig_disc, use_container_width=False)
+            plt.close(fig_disc)
+
+            # --- 5.2 Top-15 genres by track count ---
+            st.markdown(
+                "**5.2 Top 15 genres by track count** — `track_genre` is a "
+                "high-cardinality categorical feature. Understanding its "
+                "distribution shows whether the dataset is genre-balanced."
+            )
+            _top15_count = df_eda["track_genre"].value_counts().head(15)
+            fig_gc, ax_gc = plt.subplots(figsize=(6, 5))
+            ax_gc.barh(
+                _top15_count.index[::-1], _top15_count.values[::-1],
+                color="steelblue", edgecolor="white"
+            )
+            ax_gc.set_xlabel("Number of Tracks")
+            ax_gc.set_title("Top 15 Genres by Track Count")
+            plt.tight_layout()
+            st.pyplot(fig_gc, use_container_width=False)
+            plt.close(fig_gc)
+            st.caption(
+                f"Total unique genres: {df_eda['track_genre'].nunique()}"
+            )
+
+            # --- 5.3 Top 15 genres by mean popularity ---
+            st.markdown(
+                "**5.3 Top 15 genres by mean popularity** — some genres are more "
+                "popular on average. This plot shows which genres tend to produce "
+                "higher-scoring tracks, and is useful context for interpreting "
+                "genre-based model predictions."
+            )
+            _genre_pop = (
+                df_eda.groupby("track_genre")[config.TARGET]
+                .mean()
+                .sort_values(ascending=False)
+                .head(15)
+            )
+            fig_gp, ax_gp = plt.subplots(figsize=(6, 5))
+            _genre_pop[::-1].plot(
+                kind="barh", ax=ax_gp, color="mediumseagreen", edgecolor="white"
+            )
+            ax_gp.set_xlabel("Mean Popularity Score")
+            ax_gp.set_title("Top 15 Genres by Mean Popularity")
+            plt.tight_layout()
+            st.pyplot(fig_gp, use_container_width=False)
+            plt.close(fig_gp)
+
+            # --- 5.4 Hit rate by genre (top 15) ---
+            st.markdown(
+                "**5.4 Hit rate by genre (top 15 by track count)** — hit rate is "
+                "the fraction of tracks in a genre that exceed the popularity "
+                "threshold. The red dashed line marks the overall hit rate. "
+                "Genres above it produce hits more often than average."
+            )
+            _top15_names = df_eda["track_genre"].value_counts().head(15).index
+            _genre_hr = (
+                df_eda[df_eda["track_genre"].isin(_top15_names)]
+                .groupby("track_genre")[config.LABEL]
+                .mean()
+                .sort_values(ascending=False)
+            )
+            _overall_hr = df_eda[config.LABEL].mean()
+            fig_ghr, ax_ghr = plt.subplots(figsize=(6, 5))
+            _genre_hr[::-1].plot(
+                kind="barh", ax=ax_ghr, color="mediumpurple", edgecolor="white"
+            )
+            ax_ghr.axvline(
+                _overall_hr, color="red", linestyle="--",
+                label=f"Overall hit rate = {_overall_hr:.2f}"
+            )
+            ax_ghr.set_xlabel("Hit Rate (proportion)")
+            ax_ghr.set_title("Hit Rate by Genre — Top 15 Genres")
+            ax_ghr.legend(fontsize=9)
+            plt.tight_layout()
+            st.pyplot(fig_ghr, use_container_width=False)
+            plt.close(fig_ghr)
 
 # ===========================================================================
 # Tab 5 — Report
