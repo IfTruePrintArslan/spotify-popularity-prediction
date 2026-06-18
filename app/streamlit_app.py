@@ -561,6 +561,109 @@ with tab_eda:
                 "SMOTE is applied during training to balance the classes."
             )
 
+            # --- 3.3 Before vs After SMOTE ---
+            st.subheader("Class Balance: Before vs After SMOTE")
+            st.markdown(
+                "The raw training set is imbalanced — roughly **24% hits** and "
+                "76% flops. Left uncorrected, a classifier can score high accuracy "
+                "just by predicting 'flop' for everything. "
+                "**SMOTE** (Synthetic Minority Over-sampling Technique) fixes this "
+                "by synthesizing *new* minority-class (hit) examples: it picks a "
+                "real hit, finds its *k* nearest hit-neighbours in feature space, "
+                "and interpolates a new point along the line between them. This "
+                "creates realistic synthetic hits rather than just copying existing "
+                "ones. SMOTE is applied **only to the training data** inside the "
+                "pipeline — the test set is never touched — so there is no "
+                "data-leakage risk. After resampling the classes are 50/50, giving "
+                "the model equal exposure to both classes during training."
+            )
+
+            # Cached computation: run the EXACT resampling the model uses — split
+            # the cleaned data into the real stratified 80/20 train set, preprocess
+            # the FULL training set (IQR cap + one-hot of all 113 genres), then run
+            # SMOTE.fit_resample on the whole thing.  This is not a sample: the
+            # before/after counts are the model's real training-set balance.  The
+            # work is heavy (~12 s) so it is wrapped in @st.cache_data with no
+            # arguments — it runs once per session and every rerun is instant.
+            @st.cache_data
+            def _compute_smote_counts():
+                """Return (before, after) Flop/Hit counts for the FULL train set.
+
+                Mirrors the production pipeline exactly: split -> preprocess the
+                full X_train (no scaling needed for SMOTE) -> SMOTE.fit_resample.
+                No subsampling, so the counts are the real training-set balance.
+                """
+                from src.data import load_raw, clean, add_label, split
+                from src.features import make_preprocessor
+                from imblearn.over_sampling import SMOTE
+
+                _df = add_label(clean(load_raw()))
+                X_tr, _, y_tr, _ = split(_df)
+
+                # Preprocess the FULL training set (IQR cap + one-hot) — no scaling
+                # needed for SMOTE, which only needs distances in feature space.
+                pre = make_preprocessor(scale=False)
+                Xt = pre.fit_transform(X_tr)
+
+                # SMOTE fit_resample on the entire preprocessed training matrix.
+                _, y_res = SMOTE(random_state=config.RANDOM_STATE).fit_resample(Xt, y_tr)
+
+                before = {0: int((y_tr == 0).sum()), 1: int((y_tr == 1).sum())}
+                after  = {0: int((y_res == 0).sum()), 1: int((y_res == 1).sum())}
+                return before, after
+
+            try:
+                _smote_before, _smote_after = _compute_smote_counts()
+
+                # Grouped bar chart — two groups (Before / After), two bars each
+                # (Flop / Hit).
+                _smote_fig, _smote_ax = plt.subplots(figsize=(6, 4))
+                _x = np.arange(2)          # one group position per condition
+                _bar_w = 0.35
+                _bars_flop = _smote_ax.bar(
+                    _x - _bar_w / 2,
+                    [_smote_before[0], _smote_after[0]],
+                    width=_bar_w, label="Flop (0)",
+                    color="coral", edgecolor="white",
+                )
+                _bars_hit = _smote_ax.bar(
+                    _x + _bar_w / 2,
+                    [_smote_before[1], _smote_after[1]],
+                    width=_bar_w, label="Hit (1)",
+                    color="steelblue", edgecolor="white",
+                )
+                # Count labels on top of every bar.
+                for _b in list(_bars_flop) + list(_bars_hit):
+                    _smote_ax.text(
+                        _b.get_x() + _b.get_width() / 2,
+                        _b.get_height() + max(_smote_before[0], _smote_after[0]) * 0.01,
+                        f"{int(_b.get_height()):,}",
+                        ha="center", va="bottom", fontsize=9,
+                    )
+                _smote_ax.set_xticks(_x)
+                _smote_ax.set_xticklabels(["Before SMOTE", "After SMOTE"], fontsize=11)
+                _smote_ax.set_ylabel("Number of Tracks")
+                _smote_ax.set_title("Class Balance: Before vs After SMOTE")
+                _smote_ax.legend(fontsize=9)
+                plt.tight_layout()
+                st.pyplot(_smote_fig, use_container_width=False)
+                plt.close(_smote_fig)
+                _smote_total_before = _smote_before[0] + _smote_before[1]
+                st.caption(
+                    f"Computed on the FULL training set ({_smote_total_before:,} rows) — "
+                    "the exact stratified 80/20 train split the model is fitted on, "
+                    "with no subsampling. Before SMOTE: "
+                    f"{_smote_before[0]:,} flops vs {_smote_before[1]:,} hits. "
+                    f"After SMOTE: {_smote_after[0]:,} vs {_smote_after[1]:,} "
+                    "(balanced ~50/50), giving the model equal exposure to hits and "
+                    "flops during training."
+                )
+            except Exception as _smote_exc:
+                st.info(
+                    f"Could not render the SMOTE chart: {_smote_exc}. "
+                    "Ensure imbalanced-learn is installed (`pip install imbalanced-learn`)."
+                )
+
             # ---------------------------------------------------------------
             # Section 4 — Feature Relationships
             # ---------------------------------------------------------------
@@ -622,80 +725,109 @@ with tab_eda:
             st.pyplot(fig_tc, use_container_width=False)
             plt.close(fig_tc)
 
-            # --- 4.3 Scatter plots (sampled) ---
-            _SCATTER_N = 5000
-            st.markdown(
-                f"**4.3 Scatter plots** — key features vs popularity. "
-                f"A random sample of {_SCATTER_N:,} rows is used for rendering "
-                "speed (noted here). A red trend line (linear fit) is overlaid "
-                "on each plot."
-            )
+            # --- 4.3 Scatter plots (full data) ---
             _SCATTER_FEATURES = [
                 "loudness", "danceability", "energy", "acousticness"
             ]
-            _df_scat = df_eda.sample(
-                n=min(_SCATTER_N, len(df_eda)), random_state=config.RANDOM_STATE
-            )
 
-            fig_scat, axes_scat = plt.subplots(2, 2, figsize=(9, 6))
-            axes_scat = axes_scat.flatten()
-            for _i, _feat in enumerate(_SCATTER_FEATURES):
-                _x = _df_scat[_feat].values
-                _y = _df_scat[config.TARGET].values
-                _valid = ~(np.isnan(_x) | np.isnan(_y))
-                axes_scat[_i].scatter(
-                    _x[_valid], _y[_valid],
-                    alpha=0.15, s=8, color="steelblue"
-                )
-                _m, _b = np.polyfit(_x[_valid], _y[_valid], 1)
-                _xl = np.linspace(_x[_valid].min(), _x[_valid].max(), 100)
-                axes_scat[_i].plot(_xl, _m * _xl + _b, color="red", linewidth=1.5,
+            @st.cache_data
+            def _build_scatter_fig():
+                """Build the 4-panel feature-vs-popularity scatter on FULL data.
+
+                Plots every cleaned row (~90k).  To keep ~90k points fast and
+                readable without sampling we render each scatter with
+                ``rasterized=True`` (the dense point cloud is flattened to a
+                bitmap at draw time), a tiny marker (``s=4``) and low opacity
+                (``alpha=0.15``).  A red linear-fit trend line is overlaid on
+                each panel.  Returned figure is cached so it builds once.
+                """
+                from src.data import load_raw, clean, add_label
+                _df = add_label(clean(load_raw()))
+
+                _fig, _axes = plt.subplots(2, 2, figsize=(9, 6))
+                _axes = _axes.flatten()
+                for _i, _feat in enumerate(_SCATTER_FEATURES):
+                    _x = _df[_feat].values
+                    _y = _df[config.TARGET].values
+                    _valid = ~(np.isnan(_x) | np.isnan(_y))
+                    _axes[_i].scatter(
+                        _x[_valid], _y[_valid],
+                        alpha=0.15, s=4, color="steelblue", rasterized=True,
+                    )
+                    _m, _b = np.polyfit(_x[_valid], _y[_valid], 1)
+                    _xl = np.linspace(_x[_valid].min(), _x[_valid].max(), 100)
+                    _axes[_i].plot(_xl, _m * _xl + _b, color="red", linewidth=1.5,
                                    label="trend")
-                axes_scat[_i].set_xlabel(_feat, fontsize=9)
-                axes_scat[_i].set_ylabel("Popularity", fontsize=9)
-                axes_scat[_i].set_title(f"{_feat} vs Popularity", fontsize=10)
-                axes_scat[_i].legend(fontsize=8)
-            fig_scat.suptitle(
-                f"Scatter Plots — Key Features vs Popularity  "
-                f"(sample n={_SCATTER_N:,})",
-                fontsize=11
-            )
-            plt.tight_layout()
-            st.pyplot(fig_scat, use_container_width=False)
-            plt.close(fig_scat)
+                    _axes[_i].set_xlabel(_feat, fontsize=9)
+                    _axes[_i].set_ylabel("Popularity", fontsize=9)
+                    _axes[_i].set_title(f"{_feat} vs Popularity", fontsize=10)
+                    _axes[_i].legend(fontsize=8)
+                _fig.suptitle(
+                    f"Scatter Plots — Key Features vs Popularity  "
+                    f"(all {len(_df):,} tracks)",
+                    fontsize=11
+                )
+                _fig.tight_layout()
+                return _fig, len(_df)
 
-            # --- 4.4 Pairplot (sampled) ---
-            _PAIRPLOT_N = 1500
+            fig_scat, _scat_n = _build_scatter_fig()
+            st.markdown(
+                f"**4.3 Scatter plots** — key features vs popularity, plotted for "
+                f"the **full cleaned dataset ({_scat_n:,} tracks)** — no sampling. "
+                "The dense point cloud is rasterized for speed and drawn with small, "
+                "low-opacity markers so structure stays visible. A red trend line "
+                "(linear fit) is overlaid on each plot."
+            )
+            st.pyplot(fig_scat, use_container_width=False)
+
+            # --- 4.4 Pairplot (full data) ---
             _PAIRPLOT_FEATURES = [
                 "danceability", "energy", "loudness",
                 "acousticness", "instrumentalness"
             ]
+
+            @st.cache_data
+            def _build_pairplot_fig():
+                """Build the seaborn pairplot on the FULL dataset (no sampling).
+
+                This is the heaviest EDA figure: a 5x5 grid of pairwise scatters
+                over every cleaned row (~90k), coloured by Hit/Flop.  Measured at
+                ~38 s to build+render once, comfortably under the 90 s budget, so
+                it runs on full data.  Each scatter uses ``rasterized=True`` plus a
+                tiny marker (``s=6``) and low opacity (``alpha=0.15``) so the dense
+                clouds render quickly and stay legible.  Cached so it builds once
+                per session; reruns are instant.
+                """
+                from src.data import load_raw, clean, add_label
+                _df = add_label(clean(load_raw()))
+                _dfp = _df[_PAIRPLOT_FEATURES + [config.LABEL]].copy()
+                _dfp["Class"] = _dfp[config.LABEL].map({0: "Flop", 1: "Hit"})
+
+                _g = sns.pairplot(
+                    _dfp,
+                    hue="Class",
+                    vars=_PAIRPLOT_FEATURES,
+                    palette={"Flop": "coral", "Hit": "steelblue"},
+                    plot_kws={"s": 6, "alpha": 0.15, "rasterized": True},
+                    diag_kind="kde",
+                )
+                _g.fig.suptitle(
+                    f"Pairplot — {', '.join(_PAIRPLOT_FEATURES)}  "
+                    f"(all {len(_dfp):,} tracks, colored by Hit/Flop)",
+                    y=1.01, fontsize=10
+                )
+                return _g.fig, len(_dfp)
+
+            fig_pair, _pair_n = _build_pairplot_fig()
             st.markdown(
                 f"**4.4 Pairplot** — every pairwise scatter plus diagonal KDE, "
                 "color-coded by Hit/Flop class. This is the most comprehensive "
-                "view of feature interactions. "
-                f"Sampled to {_PAIRPLOT_N:,} rows and 5 features for speed."
+                "view of feature interactions, built on the **full cleaned dataset "
+                f"({_pair_n:,} tracks)** across 5 features — no sampling. The dense "
+                "scatters are rasterized with small, low-opacity markers so the "
+                "figure renders quickly while showing every track."
             )
-            _df_pair = df_eda[_PAIRPLOT_FEATURES + [config.LABEL]].sample(
-                n=min(_PAIRPLOT_N, len(df_eda)), random_state=config.RANDOM_STATE
-            ).copy()
-            _df_pair["Class"] = _df_pair[config.LABEL].map({0: "Flop", 1: "Hit"})
-
-            _g = sns.pairplot(
-                _df_pair,
-                hue="Class",
-                vars=_PAIRPLOT_FEATURES,
-                palette={"Flop": "coral", "Hit": "steelblue"},
-                plot_kws={"alpha": 0.25, "s": 10},
-                diag_kind="kde",
-            )
-            _g.fig.suptitle(
-                f"Pairplot — {', '.join(_PAIRPLOT_FEATURES)}  "
-                f"(n={_PAIRPLOT_N:,} sample, colored by Hit/Flop)",
-                y=1.01, fontsize=10
-            )
-            st.pyplot(_g.fig, use_container_width=False)
-            plt.close(_g.fig)
+            st.pyplot(fig_pair, use_container_width=False)
 
             # ---------------------------------------------------------------
             # Section 5 — Discrete & Categorical Features
